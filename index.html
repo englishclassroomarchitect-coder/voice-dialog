@@ -198,22 +198,35 @@ function confirmAndSave() {
   btn.textContent = "Saving...";
   btn.disabled = true;
 
-  fetch(APPS_SCRIPT_URL, {
-    method: "POST",
-    mode: "no-cors",
-    headers: { "Content-Type": "text/plain" },
-    body: JSON.stringify({ text: text, student: studentName, token: "fbt-9k7Xm3pLwR2024chs" })
-  })
-  .then(function() {
-    // no-cors means we can't read the response, but the request went through
+  // Use a hidden form + iframe to avoid CORS/redirect issues with Apps Script
+  var iframe = document.createElement("iframe");
+  iframe.name = "voice-submit-frame";
+  iframe.style.display = "none";
+  document.body.appendChild(iframe);
+
+  var form = document.createElement("form");
+  form.method = "POST";
+  form.action = APPS_SCRIPT_URL;
+  form.target = "voice-submit-frame";
+
+  var fields = { text: text, student: studentName, token: "fbt-9k7Xm3pLwR2024chs" };
+  for (var key in fields) {
+    var input = document.createElement("input");
+    input.type = "hidden";
+    input.name = key;
+    input.value = fields[key];
+    form.appendChild(input);
+  }
+
+  document.body.appendChild(form);
+  form.submit();
+
+  // Give it a moment to land, then show success
+  setTimeout(function() {
     document.getElementById("success").style.display = "block";
     btn.textContent = "Saved ✓";
-  })
-  .catch(function(err) {
-    document.getElementById("error").textContent = "Save failed: " + err.message;
-    btn.textContent = "Use This Note →";
-    btn.disabled = false;
-  });
+    document.body.removeChild(form);
+  }, 1500);
 }
 
 window.onload = init;
