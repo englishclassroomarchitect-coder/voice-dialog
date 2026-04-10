@@ -47,9 +47,11 @@ h2 { font-size: 15px; font-weight: 600; color: #070034; margin-bottom: 16px; }
   white-space: pre-wrap;
   word-break: break-word;
   transition: border-color 0.15s, background 0.15s;
+  user-select: text;
+  cursor: text;
 }
 .transcript-box.listening { border-color: #2B7980; background: #F0FAF9; }
-.transcript-box.empty { color: #bbb; font-style: italic; }
+.transcript-box.empty { color: #bbb; font-style: italic; cursor: default; }
 .status {
   font-size: 11px; color: #888; margin-bottom: 14px;
   display: flex; align-items: center; gap: 7px; min-height: 18px;
@@ -70,7 +72,10 @@ button.primary { background: #070034; color: #fff; border-color: #070034; }
 button.primary:hover { background: #0a0050; }
 button:disabled { opacity: 0.4; cursor: default; }
 .error { color: #CD1743; font-size: 11px; margin-top: 8px; min-height: 16px; }
-.success { color: #2B7980; font-size: 12px; text-align: center; padding: 10px 0; display: none; }
+.success {
+  color: #2B7980; font-size: 12px; text-align: center;
+  padding: 10px 0; display: none;
+}
 </style>
 </head>
 <body>
@@ -88,28 +93,21 @@ button:disabled { opacity: 0.4; cursor: default; }
     <button id="clear-btn" onclick="clearTranscript()" disabled>Clear</button>
   </div>
   <div class="btn-row">
-    <button onclick="window.close()">Cancel</button>
-    <button class="primary" id="save-btn" onclick="confirmAndSave()" disabled>Use This Note →</button>
+    <button class="primary" id="copy-btn" onclick="copyText()" disabled>📋 Copy Text</button>
   </div>
-  <div class="error"   id="error"></div>
-  <div class="success" id="success">✓ Saved — you can close this tab.</div>
+  <div class="error" id="error"></div>
+  <div class="success" id="success">✓ Copied — paste into the Feedback field in the sidebar.</div>
 </div>
 
 <script>
-// ── CHANGE THIS to your deployed Apps Script web app URL ──
-// Deploy → New deployment → Web app → Execute as "Me" → Access "Anyone"
-// Copy the URL it gives you and paste it here:
-var APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzKT1Hazz7YTPuKC6QHqaVuvRxwLIq0cRVaZ_eMY1w/exec";
-
 var recognition = null;
 var isListening = false;
 var fullText    = "";
 var interim     = "";
-var studentName = "";
 
 (function() {
   var params = new URLSearchParams(window.location.search);
-  studentName = params.get("student") || "";
+  var studentName = params.get("student") || "";
   if (studentName) document.getElementById("student-label").textContent = studentName;
 })();
 
@@ -148,6 +146,7 @@ function toggleRecording() { isListening ? stopListening() : startListening(); }
 function startListening() {
   if (!recognition) init();
   document.getElementById("error").textContent = "";
+  document.getElementById("success").style.display = "none";
   isListening = true;
   try { recognition.start(); } catch(e) {}
   document.getElementById("record-btn").textContent = "⏹ Stop";
@@ -165,7 +164,7 @@ function stopListening() {
   document.getElementById("record-btn").textContent = "🎙 Record";
   document.getElementById("record-btn").classList.remove("on");
   document.getElementById("dot").classList.remove("active");
-  document.getElementById("status-text").textContent = fullText.trim() ? "Done — review above." : "Ready";
+  document.getElementById("status-text").textContent = fullText.trim() ? "Done — copy when ready." : "Ready";
   document.getElementById("transcript").classList.remove("listening");
   updateDisplay();
 }
@@ -176,57 +175,42 @@ function updateDisplay() {
   if (text.trim()) {
     box.textContent = text;
     box.classList.remove("empty");
-    document.getElementById("save-btn").disabled  = false;
+    document.getElementById("copy-btn").disabled  = false;
     document.getElementById("clear-btn").disabled = false;
   } else {
     box.textContent = "Start recording to transcribe...";
     box.classList.add("empty");
-    document.getElementById("save-btn").disabled  = true;
+    document.getElementById("copy-btn").disabled  = true;
     document.getElementById("clear-btn").disabled = true;
   }
 }
 
 function clearTranscript() {
-  stopListening(); fullText = ""; interim = ""; updateDisplay();
+  stopListening();
+  fullText = "";
+  interim = "";
+  document.getElementById("success").style.display = "none";
+  updateDisplay();
 }
 
-function confirmAndSave() {
+function copyText() {
   var text = fullText.trim();
   if (!text) return;
   stopListening();
-  var btn = document.getElementById("save-btn");
-  btn.textContent = "Saving...";
-  btn.disabled = true;
-
-  // Use a hidden form + iframe to avoid CORS/redirect issues with Apps Script
-  var iframe = document.createElement("iframe");
-  iframe.name = "voice-submit-frame";
-  iframe.style.display = "none";
-  document.body.appendChild(iframe);
-
-  var form = document.createElement("form");
-  form.method = "POST";
-  form.action = APPS_SCRIPT_URL;
-  form.target = "voice-submit-frame";
-
-  var fields = { text: text, student: studentName, token: "fbt-9k7Xm3pLwR2024chs" };
-  for (var key in fields) {
-    var input = document.createElement("input");
-    input.type = "hidden";
-    input.name = key;
-    input.value = fields[key];
-    form.appendChild(input);
-  }
-
-  document.body.appendChild(form);
-  form.submit();
-
-  // Give it a moment to land, then show success
-  setTimeout(function() {
+  navigator.clipboard.writeText(text).then(function() {
     document.getElementById("success").style.display = "block";
-    btn.textContent = "Saved ✓";
-    document.body.removeChild(form);
-  }, 1500);
+    document.getElementById("copy-btn").textContent = "✓ Copied";
+    setTimeout(function() {
+      document.getElementById("copy-btn").textContent = "📋 Copy Text";
+    }, 2000);
+  }).catch(function() {
+    var range = document.createRange();
+    range.selectNodeContents(document.getElementById("transcript"));
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.getElementById("status-text").textContent = "Press Ctrl+C to copy.";
+  });
 }
 
 window.onload = init;
